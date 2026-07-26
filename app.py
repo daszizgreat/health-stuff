@@ -419,8 +419,6 @@ def load_dashboard_data():
 # TOP-LEVEL NAVIGATION
 # ============================================================
 
-st.page_link("pages/home.py", label="🏠 Home", width='content')
-
 tab_log, tab_dashboard = st.tabs(["📝 Daily Log", "📊 Dashboard"])
 
 
