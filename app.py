@@ -7,6 +7,8 @@ from textwrap import dedent
 import base64
 from pathlib import Path
 import io
+import re
+from fpdf import FPDF
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -34,7 +36,7 @@ def set_background(image_path):
         <style>
         .stApp {{
             background-image:
-                linear-gradient(rgba(5,5,5,0.85), rgba(5,5,5,0.85)),
+                linear-gradient(160deg, rgba(8,10,20,0.72), rgba(15,10,25,0.72)),
                 url("data:image/jpeg;base64,{encoded}");
             background-size: cover;
             background-position: center;
@@ -85,7 +87,11 @@ except Exception as error:
 st.markdown(
     """
 <style>
-.stApp { color: #f5f5f5; }
+* { scrollbar-width: thin; }
+
+.stApp {
+    color: #f2f3f7;
+}
 
 header[data-testid="stHeader"] { background: transparent; }
 #MainMenu { visibility: hidden; }
@@ -97,56 +103,87 @@ footer { visibility: hidden; }
     max-width: 1500px;
 }
 
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+
 .main-header { margin-bottom: 25px; }
 
 .main-title {
-    font-size: 40px;
+    font-size: 42px;
     font-weight: 800;
-    letter-spacing: -1px;
-    background: linear-gradient(90deg, #ffffff, #9db8ff);
+    letter-spacing: -1.2px;
+    background: linear-gradient(90deg, #ffffff, #a9c3ff 60%, #c9a9ff);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 40px rgba(124, 158, 255, 0.25);
 }
 
 .main-subtitle {
     font-size: 15px;
-    color: #777777;
-    margin-top: 5px;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 6px;
 }
 
 .blue-line {
     height: 1px;
-    background: linear-gradient(90deg, #168cff, rgba(22,140,255,0.05));
+    background: linear-gradient(90deg, rgba(124,158,255,0.9), rgba(124,158,255,0));
     margin-top: 20px;
+    border-radius: 1px;
 }
+
+.dash-title {
+    font-size: 2.2rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, #9db8ff, #c9a9ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0px;
+    text-shadow: 0 0 40px rgba(167, 139, 250, 0.2);
+}
+.dash-sub { color: rgba(255,255,255,0.55); margin-top: -6px; margin-bottom: 18px; }
+
+/* ============================================================
+   STATUS PILLS
+   ============================================================ */
 
 .database-online {
     display: inline-block;
-    background: rgba(35, 190, 100, 0.08);
-    border: 1px solid rgba(35, 190, 100, 0.30);
-    color: #40d17d;
+    background: rgba(64, 209, 125, 0.12);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(64, 209, 125, 0.35);
+    color: #6ee7a8;
     padding: 8px 14px;
-    border-radius: 8px;
+    border-radius: 999px;
     font-size: 12px;
     font-weight: 600;
+    box-shadow: 0 0 18px rgba(64, 209, 125, 0.15);
 }
 
 .database-offline {
     display: inline-block;
-    background: rgba(220, 50, 50, 0.08);
-    border: 1px solid rgba(220, 50, 50, 0.30);
-    color: #ff5c5c;
+    background: rgba(255, 92, 92, 0.12);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 92, 92, 0.35);
+    color: #ff8787;
     padding: 8px 14px;
-    border-radius: 8px;
+    border-radius: 999px;
     font-size: 12px;
     font-weight: 600;
+    box-shadow: 0 0 18px rgba(255, 92, 92, 0.15);
 }
 
-.section-header { margin-top: 26px; margin-bottom: 12px; }
+/* ============================================================
+   SECTION HEADERS
+   ============================================================ */
+
+.section-header { margin-top: 28px; margin-bottom: 14px; }
 
 .section-title {
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 700;
     color: #ffffff;
     display: flex;
     align-items: center;
@@ -155,64 +192,137 @@ footer { visibility: hidden; }
 
 .section-description {
     font-size: 13px;
-    color: #707070;
+    color: rgba(255,255,255,0.45);
     margin-top: 3px;
 }
 
+/* ============================================================
+   GLASS PANELS (containers, expanders)
+   ============================================================ */
+
 div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: #101010;
-    border: 1px solid #242424;
+    background: rgba(255, 255, 255, 0.045);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 18px;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    border-color: rgba(124, 158, 255, 0.25);
+}
+
+div[data-testid="stExpander"] {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
 }
+
+/* ============================================================
+   INPUTS
+   ============================================================ */
 
 .stNumberInput input,
 .stTextInput input,
 .stTextArea textarea {
-    background-color: #080808 !important;
+    background-color: rgba(0, 0, 0, 0.35) !important;
+    backdrop-filter: blur(8px);
     color: #ffffff !important;
-    border: 1px solid #303030 !important;
-    border-radius: 8px !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    border-radius: 10px !important;
+}
+
+.stNumberInput input:focus,
+.stTextInput input:focus,
+.stTextArea textarea:focus {
+    border-color: rgba(124, 158, 255, 0.55) !important;
+    box-shadow: 0 0 0 3px rgba(124, 158, 255, 0.15) !important;
 }
 
 div[data-baseweb="select"] > div {
-    background-color: #080808 !important;
-    border-color: #303030 !important;
+    background-color: rgba(0, 0, 0, 0.35) !important;
+    backdrop-filter: blur(8px);
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    border-radius: 10px !important;
     color: #ffffff !important;
 }
 
-label { color: #bdbdbd !important; }
+label { color: rgba(255,255,255,0.75) !important; }
+
+/* Sliders */
+div[data-testid="stSlider"] [role="slider"] {
+    box-shadow: 0 0 0 6px rgba(124, 158, 255, 0.18);
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
 
 .stButton > button {
     width: 100%;
-    background: linear-gradient(90deg, #1266f1, #304fc2);
+    background: linear-gradient(135deg, rgba(124,158,255,0.9), rgba(167,139,250,0.9));
+    backdrop-filter: blur(10px);
     color: #ffffff;
-    border: none;
-    border-radius: 9px;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px;
     padding: 12px;
     font-weight: 700;
     font-size: 14px;
     letter-spacing: 0.5px;
-    transition: 0.2s;
+    box-shadow: 0 4px 20px rgba(124, 158, 255, 0.25);
+    transition: 0.2s ease;
 }
 
 .stButton > button:hover {
     color: #ffffff;
-    border: none;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(18, 102, 241, 0.35);
+    border-color: rgba(255,255,255,0.32);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(124, 102, 241, 0.4);
 }
 
+.stButton > button:active {
+    transform: translateY(0px);
+}
+
+.stDownloadButton > button {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+    color: #ffffff;
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 12px;
+    font-weight: 600;
+    transition: 0.2s ease;
+}
+
+.stDownloadButton > button:hover {
+    border-color: rgba(124, 158, 255, 0.5);
+    background: rgba(124, 158, 255, 0.10);
+}
+
+/* ============================================================
+   CALCULATED / COUNTDOWN GLASS BOXES
+   ============================================================ */
+
 .calculated-box {
-    background: #080808;
-    border: 1px solid #242424;
-    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
     padding: 18px;
     margin-top: 10px;
 }
 
 .calculated-label {
     font-size: 11px;
-    color: #777777;
+    color: rgba(255,255,255,0.5);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -220,89 +330,143 @@ label { color: #bdbdbd !important; }
 .calculated-value {
     font-size: 28px;
     font-weight: 700;
-    color: #168cff;
-    margin-top: 5px;
-}
-
-div[data-testid="stCheckbox"] {
-    background: #080808;
-    border: 1px solid #242424;
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-bottom: 6px;
-}
-
-.app-footer {
-    text-align: center;
-    color: #444444;
-    font-size: 12px;
-    margin-top: 50px;
-    padding-top: 20px;
-    border-top: 1px solid #181818;
-}
-
-/* --- Dashboard-specific styles --- */
-[data-testid="stMetric"] {
-    background: linear-gradient(145deg, #1a1d29, #14161f);
-    border: 1px solid #2a2d3a;
-    border-radius: 14px;
-    padding: 18px 16px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-}
-[data-testid="stMetricLabel"] { color: #9aa0ac; font-size: 0.85rem; }
-[data-testid="stMetricValue"] { color: #f5f6fa; font-weight: 700; }
-
-.dash-title {
-    font-size: 2.1rem;
-    font-weight: 800;
     background: linear-gradient(90deg, #7c9eff, #a78bfa);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 0px;
-}
-.dash-sub { color: #9aa0ac; margin-top: -6px; margin-bottom: 18px; }
-
-.stTabs [data-baseweb="tab-list"] { gap: 6px; }
-.stTabs [data-baseweb="tab"] {
-    background-color: #1a1d29;
-    border-radius: 10px 10px 0 0;
-    padding: 8px 18px;
-    color: #9aa0ac;
-}
-.stTabs [aria-selected="true"] {
-    background-color: #262a3a;
-    color: #f5f6fa !important;
-}
-
-div[data-testid="stExpander"] {
-    background-color: #14161f;
-    border: 1px solid #262a3a;
-    border-radius: 10px;
-}
-
-section[data-testid="stSidebar"] {
-    background-color: #0a0c12;
-    border-right: 1px solid #21242f;
+    margin-top: 5px;
 }
 
 .countdown-box {
-    background: linear-gradient(145deg, #1a1d29, #14161f);
-    border: 1px solid #2a2d3a;
-    border-radius: 14px;
-    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    padding: 16px 22px;
     margin-bottom: 18px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-.countdown-label { color: #9aa0ac; font-size: 0.9rem; }
+.countdown-label { color: rgba(255,255,255,0.6); font-size: 0.9rem; }
 .countdown-value {
     font-size: 1.6rem;
     font-weight: 800;
     background: linear-gradient(90deg, #7c9eff, #a78bfa);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+}
+
+/* ============================================================
+   CHECKBOXES (habits)
+   ============================================================ */
+
+div[data-testid="stCheckbox"] {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    transition: 0.2s ease;
+}
+
+div[data-testid="stCheckbox"]:hover {
+    border-color: rgba(124, 158, 255, 0.3);
+    background: rgba(124, 158, 255, 0.06);
+}
+
+/* ============================================================
+   METRICS
+   ============================================================ */
+
+[data-testid="stMetric"] {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    padding: 18px 16px;
+    box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-2px);
+    border-color: rgba(124, 158, 255, 0.25);
+}
+[data-testid="stMetricLabel"] { color: rgba(255,255,255,0.55); font-size: 0.85rem; }
+[data-testid="stMetricValue"] { color: #f5f6fa; font-weight: 700; }
+
+/* ============================================================
+   TABS
+   ============================================================ */
+
+.stTabs [data-baseweb="tab-list"] {
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(14px);
+    border-radius: 14px;
+    padding: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.stTabs [data-baseweb="tab"] {
+    background-color: transparent;
+    border-radius: 10px;
+    padding: 8px 18px;
+    color: rgba(255,255,255,0.55);
+    transition: 0.2s ease;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    background-color: rgba(255,255,255,0.05);
+    color: #f5f6fa;
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, rgba(124,158,255,0.35), rgba(167,139,250,0.35));
+    color: #ffffff !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+
+section[data-testid="stSidebar"] {
+    background: rgba(5, 5, 10, 0.55);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ============================================================
+   DATAFRAMES / DATA EDITOR
+   ============================================================ */
+
+div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* ============================================================
+   MISC
+   ============================================================ */
+
+.app-footer {
+    text-align: center;
+    color: rgba(255,255,255,0.3);
+    font-size: 12px;
+    margin-top: 50px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+hr {
+    border-color: rgba(255, 255, 255, 0.08) !important;
 }
 </style>
     """,
@@ -364,6 +528,129 @@ def style_fig(fig):
     return fig
 
 
+def compute_streaks(frame, cols):
+    """Return {habit: {'current': n, 'longest': m}} computed over the given (already sorted-by-date) frame."""
+    frame = frame.sort_values("Date")
+    results = {}
+    for col in cols:
+        vals = frame[col].fillna(False).tolist()
+
+        longest = 0
+        running = 0
+        for v in vals:
+            running = running + 1 if v else 0
+            longest = max(longest, running)
+
+        current = 0
+        for v in reversed(vals):
+            if v:
+                current += 1
+            else:
+                break
+
+        results[col] = {"current": current, "longest": longest}
+    return results
+
+
+_SET_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:kg|kgs|lbs?|lb)?\s*[x×]\s*(\d+)", re.IGNORECASE)
+
+
+def parse_workout_sets(notes):
+    """Parse freeform workout notes into (exercise_name, weight, reps) tuples.
+
+    Expects a loose format like:
+        Bench Press
+        60 x 8
+        70 x 6
+    A line is treated as an exercise name if it doesn't match the '<weight> x <reps>' pattern.
+    """
+    if not notes or not isinstance(notes, str):
+        return []
+
+    results = []
+    current_exercise = None
+    for raw_line in notes.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = _SET_PATTERN.search(line)
+        if match:
+            if current_exercise:
+                weight = float(match.group(1))
+                reps = int(match.group(2))
+                results.append((current_exercise, weight, reps))
+        else:
+            current_exercise = line.strip(":").strip()
+    return results
+
+
+def generate_weekly_pdf(frame):
+    """Build a simple weekly PDF report (last 7 logged days) and return raw PDF bytes."""
+    last_7 = frame.sort_values("Date").tail(7)
+
+    pdf = FPDF()
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "FitGraph - Weekly Report", ln=True)
+
+    pdf.set_font("Helvetica", "", 10)
+    if not last_7.empty:
+        date_range_text = (
+            f"{last_7['Date'].min().strftime('%d %b %Y')} - {last_7['Date'].max().strftime('%d %b %Y')}"
+        )
+        pdf.cell(0, 8, date_range_text, ln=True)
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 8, "Summary Averages", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Avg Weight: {last_7['Weight'].mean():.1f} kg", ln=True)
+    pdf.cell(0, 6, f"Avg Sleep: {last_7['Sleep Hours'].mean():.2f} hrs", ln=True)
+    pdf.cell(0, 6, f"Avg Steps: {last_7['Steps'].mean():.0f}", ln=True)
+    pdf.cell(0, 6, f"Avg Mood: {last_7['Mood'].mean():.1f}/10", ln=True)
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 8, "Daily Log", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+
+    col_widths = [22, 18, 16, 16, 18, 90]
+    headers = ["Date", "Weight", "Sleep", "Mood", "Steps", "Workout"]
+    for w, h in zip(col_widths, headers):
+        pdf.cell(w, 7, h, border=1)
+    pdf.ln()
+
+    for _, r in last_7.sort_values("Date").iterrows():
+        pdf.cell(col_widths[0], 7, r["Date"].strftime("%d %b"), border=1)
+        pdf.cell(col_widths[1], 7, f"{r['Weight']:.1f}" if pd.notna(r["Weight"]) else "-", border=1)
+        pdf.cell(col_widths[2], 7, f"{r['Sleep Hours']:.1f}" if pd.notna(r["Sleep Hours"]) else "-", border=1)
+        pdf.cell(col_widths[3], 7, f"{r['Mood']:.0f}" if pd.notna(r["Mood"]) else "-", border=1)
+        pdf.cell(col_widths[4], 7, f"{r['Steps']:.0f}" if pd.notna(r["Steps"]) else "-", border=1)
+        workout_text = str(r["Workout"])[:45] if pd.notna(r["Workout"]) else "Rest Day"
+        pdf.cell(col_widths[5], 7, workout_text, border=1)
+        pdf.ln()
+
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 8, "Habit Completion (last 7 days)", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+
+    habit_cols_local = [
+        "Gym Completed", "Creatine", "Whey Protein", "Flaxseed",
+        "8000 Steps", "Sleep Before 1 AM", "3L Water", "No Junk Food",
+    ]
+    for col in habit_cols_local:
+        if col in last_7.columns:
+            pct = last_7[col].fillna(False).mean() * 100
+            pdf.cell(0, 6, f"{col}: {pct:.0f}%", ln=True)
+
+    raw_output = pdf.output()
+    if isinstance(raw_output, str):
+        return raw_output.encode("latin-1")
+    return bytes(raw_output)
+
+
 @st.cache_data(ttl=300)
 def load_dashboard_data():
     docs = list(daily_logs_collection.find({}, {"_id": 0}))
@@ -418,6 +705,7 @@ def load_dashboard_data():
 # ============================================================
 # TOP-LEVEL NAVIGATION
 # ============================================================
+
 
 tab_log, tab_dashboard = st.tabs(["📝 Daily Log", "📊 Dashboard"])
 
@@ -860,13 +1148,22 @@ with tab_dashboard:
     st.write("")
 
     # ---------- TABS ----------
-    tab_weight, tab_sleep, tab_steps, tab_mood, tab_habits, tab_history = st.tabs(
-        ["⚖️ Weight", "😴 Sleep", "👟 Steps", "🙂 Mood", "✅ Habits & Extras", "🏋️ History"]
+    tab_weight, tab_sleep, tab_steps, tab_mood, tab_habits, tab_prs, tab_history = st.tabs(
+        ["⚖️ Weight", "😴 Sleep", "👟 Steps", "🙂 Mood", "✅ Habits & Extras", "🏆 PRs", "🏋️ History"]
     )
 
     with tab_weight:
-        fig = px.line(df, x="Date", y="Weight", markers=True, color_discrete_sequence=[ACCENT])
-        fig.update_traces(fill="tozeroy", fillcolor="rgba(124,158,255,0.08)")
+        weight_df = df[["Date", "Weight"]].dropna(subset=["Weight"]).sort_values("Date")
+        weight_df["7-day avg"] = weight_df["Weight"].rolling(7, min_periods=1).mean()
+
+        fig = px.line(weight_df, x="Date", y="Weight", markers=True, color_discrete_sequence=[ACCENT])
+        fig.update_traces(fill="tozeroy", fillcolor="rgba(124,158,255,0.08)", name="Weight")
+        fig.add_scatter(
+            x=weight_df["Date"], y=weight_df["7-day avg"],
+            mode="lines", name="7-day avg",
+            line=dict(color=ACCENT2, width=3, dash="dash"),
+        )
+        fig.update_layout(showlegend=True)
         st.plotly_chart(style_fig(fig), width='stretch')
 
     with tab_sleep:
@@ -888,6 +1185,15 @@ with tab_dashboard:
             "Gym Completed", "Creatine", "Whey Protein", "Flaxseed",
             "8000 Steps", "Sleep Before 1 AM", "3L Water", "No Junk Food",
         ]
+
+        st.markdown("**🔥 Streaks**")
+        streaks = compute_streaks(df, habit_cols)
+        streak_rows = [habit_cols[i:i + 4] for i in range(0, len(habit_cols), 4)]
+        for row_cols in streak_rows:
+            cols = st.columns(len(row_cols))
+            for c, habit in zip(cols, row_cols):
+                s = streaks[habit]
+                c.metric(habit, f"{s['current']}🔥", help=f"Longest streak: {s['longest']} days")
 
         st.markdown("**Habit completion rate**")
         rates = (df[habit_cols].fillna(False).mean() * 100).round(0).sort_values(ascending=False)
@@ -955,6 +1261,40 @@ with tab_dashboard:
             st.session_state["show_dashboard_balloons"] = True
             st.rerun()
 
+    with tab_prs:
+        pr_rows = []
+        for _, r in df.iterrows():
+            for exercise, weight, reps in parse_workout_sets(r.get("Workout Notes")):
+                pr_rows.append({"Date": r["Date"], "Exercise": exercise, "Weight": weight, "Reps": reps})
+
+        if not pr_rows:
+            st.info(
+                "No parsable sets found yet. Log workouts with a format like:\n\n"
+                "Bench Press\n60 x 8\n70 x 6\n\n"
+                "(exercise name on its own line, then '<weight> x <reps>' lines below it)"
+            )
+        else:
+            pr_df = pd.DataFrame(pr_rows)
+            exercises = sorted(pr_df["Exercise"].unique())
+            selected_exercise = st.selectbox("Exercise", exercises)
+
+            ex_df = pr_df[pr_df["Exercise"] == selected_exercise]
+            daily_top = ex_df.groupby("Date", as_index=False)["Weight"].max().sort_values("Date")
+
+            best_ever = daily_top["Weight"].max()
+            st.metric(f"All-time best — {selected_exercise}", f"{best_ever:.1f} kg")
+
+            fig = px.line(daily_top, x="Date", y="Weight", markers=True, color_discrete_sequence=[ACCENT])
+            fig.update_layout(yaxis_title="Top Set Weight (kg)")
+            st.plotly_chart(style_fig(fig), width='stretch')
+
+            st.markdown("**All logged sets**")
+            st.dataframe(
+                ex_df.sort_values("Date", ascending=False)[["Date", "Weight", "Reps"]],
+                width='stretch',
+                hide_index=True,
+            )
+
     with tab_history:
         for _, r in df.sort_values("Date", ascending=False).iterrows():
             title = r["Workout"] if pd.notna(r["Workout"]) else "Rest Day"
@@ -987,6 +1327,20 @@ with tab_dashboard:
         data=output.getvalue(),
         file_name="fitness_data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        width='stretch',
+    )
+
+    # ---------- PDF WEEKLY REPORT ----------
+    st.markdown("---")
+    st.subheader("📄 Weekly PDF Report")
+    st.caption("A one-page summary of your last 7 logged days — weight, sleep, mood, steps, workouts, and habit completion.")
+
+    pdf_bytes = generate_weekly_pdf(df)
+    st.download_button(
+        label="⬇ Download Weekly PDF Report",
+        data=pdf_bytes,
+        file_name="fitgraph_weekly_report.pdf",
+        mime="application/pdf",
         width='stretch',
     )
 
