@@ -8,7 +8,6 @@ import base64
 from pathlib import Path
 import io
 import re
-from fpdf import FPDF
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -513,6 +512,15 @@ CHART_TEMPLATE = "plotly_dark"
 ACCENT = "#7c9eff"
 ACCENT2 = "#a78bfa"
 
+# Values in the "Workout" field that count as a rest day (rather than a training day)
+REST_DAY_VALUES = {"rest", "rest day"}
+
+
+def is_rest_day(workout_title):
+    if pd.isna(workout_title):
+        return True
+    return str(workout_title).strip().lower() in REST_DAY_VALUES
+
 
 def style_fig(fig):
     fig.update_layout(
@@ -584,71 +592,114 @@ def parse_workout_sets(notes):
     return results
 
 
-def generate_weekly_pdf(frame):
-    """Build a simple weekly PDF report (last 7 logged days) and return raw PDF bytes."""
-    last_7 = frame.sort_values("Date").tail(7)
+def generate_weekly_excel(frame):
+    """Build a weekly Excel report (Mon-Sun week containing the most recent log) and return raw XLSX bytes.
 
-    pdf = FPDF()
-    pdf.add_page()
+    Produces a workbook with three sheets: Summary, Daily Log, and Habits.
+    The week is always a full Monday-to-Sunday calendar week — specifically the
+    week that contains the most recent logged date in `frame` — regardless of
+    how many days within that week actually have entries.
+    The "Daily Log" sheet includes every column present in the dataset (same
+    columns as the full "Export to Excel" button), not a curated subset.
+    """
+    frame = frame.sort_values("Date")
 
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "FitGraph - Weekly Report", ln=True)
+    if frame.empty:
+        last_date = pd.Timestamp(date.today())
+    else:
+        last_date = frame["Date"].max()
 
-    pdf.set_font("Helvetica", "", 10)
-    if not last_7.empty:
-        date_range_text = (
-            f"{last_7['Date'].min().strftime('%d %b %Y')} - {last_7['Date'].max().strftime('%d %b %Y')}"
-        )
-        pdf.cell(0, 8, date_range_text, ln=True)
-    pdf.ln(4)
+    # Monday-Sunday week containing the most recent logged date.
+    # weekday(): Monday=0 ... Sunday=6
+    week_start = last_date - pd.Timedelta(days=last_date.weekday())
+    week_end = week_start + pd.Timedelta(days=6)
 
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 8, "Summary Averages", ln=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Avg Weight: {last_7['Weight'].mean():.1f} kg", ln=True)
-    pdf.cell(0, 6, f"Avg Sleep: {last_7['Sleep Hours'].mean():.2f} hrs", ln=True)
-    pdf.cell(0, 6, f"Avg Steps: {last_7['Steps'].mean():.0f}", ln=True)
-    pdf.cell(0, 6, f"Avg Mood: {last_7['Mood'].mean():.1f}/10", ln=True)
-    pdf.ln(4)
+    week_df = frame[(frame["Date"] >= week_start) & (frame["Date"] <= week_end)].copy()
 
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 8, "Daily Log", ln=True)
-    pdf.set_font("Helvetica", "", 9)
+    gym_days = int(week_df["Gym Completed"].fillna(False).sum()) if not week_df.empty else 0
+    rest_days = int(week_df["Workout"].apply(is_rest_day).sum()) if not week_df.empty else 0
 
-    col_widths = [22, 18, 16, 16, 18, 90]
-    headers = ["Date", "Weight", "Sleep", "Mood", "Steps", "Workout"]
-    for w, h in zip(col_widths, headers):
-        pdf.cell(w, 7, h, border=1)
-    pdf.ln()
+    summary_df = pd.DataFrame({
+        "Metric": [
+            "Week",
+            "Days Logged",
+            "Avg Weight (kg)",
+            "Avg Sleep (hrs)",
+            "Avg Sleep Quality (/10)",
+            "Avg Steps",
+            "Avg Walking (km)",
+            "Avg Exercise (min)",
+            "Avg Water (L)",
+            "Avg Mood (/10)",
+            "Avg Happiness (/10)",
+            "Avg Energy (/10)",
+            "Avg Stress (/10)",
+            "Avg Workout Rating (/10)",
+            "Gym Days",
+            "Rest Days",
+        ],
+        "Value": [
+            f"{week_start.strftime('%d %b %Y')} - {week_end.strftime('%d %b %Y')} (Mon-Sun)",
+            len(week_df),
+            round(week_df["Weight"].mean(), 1) if week_df["Weight"].notna().any() else None,
+            round(week_df["Sleep Hours"].mean(), 2) if week_df["Sleep Hours"].notna().any() else None,
+            round(week_df["Sleep Quality"].mean(), 1) if week_df["Sleep Quality"].notna().any() else None,
+            round(week_df["Steps"].mean(), 0) if week_df["Steps"].notna().any() else None,
+            round(week_df["Walking KM"].mean(), 1) if week_df["Walking KM"].notna().any() else None,
+            round(week_df["Exercise Minutes"].mean(), 0) if week_df["Exercise Minutes"].notna().any() else None,
+            round(week_df["Water Litres"].mean(), 1) if week_df["Water Litres"].notna().any() else None,
+            round(week_df["Mood"].mean(), 1) if week_df["Mood"].notna().any() else None,
+            round(week_df["Happiness"].mean(), 1) if week_df["Happiness"].notna().any() else None,
+            round(week_df["Energy"].mean(), 1) if week_df["Energy"].notna().any() else None,
+            round(week_df["Stress"].mean(), 1) if week_df["Stress"].notna().any() else None,
+            round(week_df["Workout Rating"].mean(), 1) if week_df["Workout Rating"].notna().any() else None,
+            gym_days,
+            rest_days,
+        ],
+    })
 
-    for _, r in last_7.sort_values("Date").iterrows():
-        pdf.cell(col_widths[0], 7, r["Date"].strftime("%d %b"), border=1)
-        pdf.cell(col_widths[1], 7, f"{r['Weight']:.1f}" if pd.notna(r["Weight"]) else "-", border=1)
-        pdf.cell(col_widths[2], 7, f"{r['Sleep Hours']:.1f}" if pd.notna(r["Sleep Hours"]) else "-", border=1)
-        pdf.cell(col_widths[3], 7, f"{r['Mood']:.0f}" if pd.notna(r["Mood"]) else "-", border=1)
-        pdf.cell(col_widths[4], 7, f"{r['Steps']:.0f}" if pd.notna(r["Steps"]) else "-", border=1)
-        workout_text = str(r["Workout"])[:45] if pd.notna(r["Workout"]) else "Rest Day"
-        pdf.cell(col_widths[5], 7, workout_text, border=1)
-        pdf.ln()
-
-    pdf.ln(4)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 8, "Habit Completion (last 7 days)", ln=True)
-    pdf.set_font("Helvetica", "", 9)
+    # Daily Log sheet: every column present in the dataset (mirrors the full export)
+    daily_log_df = week_df.sort_values("Date").copy()
+    if "Date" in daily_log_df.columns and not daily_log_df.empty:
+        daily_log_df["Date"] = daily_log_df["Date"].dt.strftime("%d %b %Y")
 
     habit_cols_local = [
         "Gym Completed", "Creatine", "Whey Protein", "Flaxseed",
         "8000 Steps", "Sleep Before 1 AM", "3L Water", "No Junk Food",
     ]
+    habit_names, habit_pcts = [], []
     for col in habit_cols_local:
-        if col in last_7.columns:
-            pct = last_7[col].fillna(False).mean() * 100
-            pdf.cell(0, 6, f"{col}: {pct:.0f}%", ln=True)
+        if col in week_df.columns:
+            habit_names.append(col)
+            pct = round(week_df[col].fillna(False).mean() * 100, 0) if len(week_df) else 0
+            habit_pcts.append(pct)
+    habits_df = pd.DataFrame({"Habit": habit_names, "Completion %": habit_pcts})
 
-    raw_output = pdf.output()
-    if isinstance(raw_output, str):
-        return raw_output.encode("latin-1")
-    return bytes(raw_output)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        summary_df.to_excel(writer, index=False, sheet_name="Summary")
+        daily_log_df.to_excel(writer, index=False, sheet_name="Daily Log")
+        habits_df.to_excel(writer, index=False, sheet_name="Habits")
+
+        from openpyxl.styles import Font
+
+        for sheet_name, sheet_df in (
+            ("Summary", summary_df),
+            ("Daily Log", daily_log_df),
+            ("Habits", habits_df),
+        ):
+            ws = writer.sheets[sheet_name]
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+            for i, col in enumerate(sheet_df.columns, start=1):
+                if sheet_df.empty:
+                    max_content_len = 0
+                else:
+                    max_content_len = max(len(str(v)) for v in sheet_df[col].tolist())
+                max_len = max(max_content_len, len(col)) + 2
+                ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = max_len
+
+    return output.getvalue()
 
 
 @st.cache_data(ttl=300)
@@ -1145,6 +1196,23 @@ with tab_dashboard:
     c3.metric("Avg Steps", f"{df['Steps'].mean():,.0f}", delta=delta(df["Steps"]))
     c4.metric("Avg Mood", f"{df['Mood'].mean():.1f}/10", delta=delta(df["Mood"]))
 
+    # Gym days vs rest days, for the currently filtered date range
+    gym_days_count = int(df["Gym Completed"].fillna(False).sum())
+    rest_days_count = int(df["Workout"].apply(is_rest_day).sum())
+    total_days_count = len(df)
+
+    c5, c6 = st.columns(2)
+    c5.metric(
+        "🏋️ Gym Days",
+        f"{gym_days_count} / {total_days_count}",
+        help="Days in the selected range where 'Gym Completed' habit was checked.",
+    )
+    c6.metric(
+        "🛌 Rest Days",
+        f"{rest_days_count} / {total_days_count}",
+        help="Days in the selected range logged as 'Rest' (or with no workout logged).",
+    )
+
     st.write("")
 
     # ---------- TABS ----------
@@ -1330,17 +1398,22 @@ with tab_dashboard:
         width='stretch',
     )
 
-    # ---------- PDF WEEKLY REPORT ----------
+    # ---------- WEEKLY EXCEL REPORT ----------
     st.markdown("---")
-    st.subheader("📄 Weekly PDF Report")
-    st.caption("A one-page summary of your last 7 logged days — weight, sleep, mood, steps, workouts, and habit completion.")
+    st.subheader("📄 Weekly Excel Report")
+    st.caption(
+        "A workbook summarizing the current Monday–Sunday week (the week containing "
+        "your most recent log) — weight, sleep, mood, steps, workouts, gym/rest day "
+        "counts, and habit completion, split across three sheets (Summary, Daily Log, "
+        "Habits). The Daily Log sheet includes every column, same as the full export."
+    )
 
-    pdf_bytes = generate_weekly_pdf(df)
+    weekly_excel_bytes = generate_weekly_excel(df)
     st.download_button(
-        label="⬇ Download Weekly PDF Report",
-        data=pdf_bytes,
-        file_name="fitgraph_weekly_report.pdf",
-        mime="application/pdf",
+        label="⬇ Download Weekly Excel Report",
+        data=weekly_excel_bytes,
+        file_name="fitgraph_weekly_report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         width='stretch',
     )
 
