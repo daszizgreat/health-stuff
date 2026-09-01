@@ -1008,7 +1008,7 @@ with tab_log:
             water_habit = st.checkbox("3L Water", value=existing_habits.get("water_3l", False))
             junk_habit = st.checkbox("No Junk Food", value=existing_habits.get("no_junk_food", False))
 
-    # ---------- SAVE ----------
+    # ---------- SAVE / DELETE ----------
     st.write("")
     st.write("")
 
@@ -1093,6 +1093,38 @@ with tab_log:
 
             except Exception as error:
                 st.error(f"MongoDB Save Error: {error}")
+
+    # ---------- DELETE THIS DAY ----------
+    if mongo_connected and existing_log:
+        st.write("")
+        with st.expander("🗑️ Delete this day's log"):
+            st.warning(
+                f"This will permanently delete the log for "
+                f"**{selected_date.strftime('%d %B %Y')}**. This cannot be undone."
+            )
+            confirm_delete = st.checkbox(
+                "I understand this cannot be undone", key="confirm_delete_day"
+            )
+            del_left, del_center, del_right = st.columns([1, 2, 1])
+            with del_center:
+                delete_clicked = st.button(
+                    "DELETE THIS DAY",
+                    width='stretch',
+                    disabled=not confirm_delete,
+                    key="delete_day_button",
+                )
+            if delete_clicked:
+                try:
+                    daily_logs_collection.delete_one({"date": log_date})
+                    load_dashboard_data.clear()
+                    st.session_state["show_delete_success"] = selected_date.strftime('%d %B %Y')
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"MongoDB Delete Error: {error}")
+
+    if st.session_state.get("show_delete_success"):
+        st.success(f"Deleted the log for {st.session_state['show_delete_success']}.")
+        del st.session_state["show_delete_success"]
 
     st.markdown(
         '<div class="app-footer">FITGRAPH · PERSONAL FITNESS INTELLIGENCE SYSTEM</div>',
@@ -1196,28 +1228,31 @@ with tab_dashboard:
     c3.metric("Avg Steps", f"{df['Steps'].mean():,.0f}", delta=delta(df["Steps"]))
     c4.metric("Avg Mood", f"{df['Mood'].mean():.1f}/10", delta=delta(df["Mood"]))
 
-    # Gym days vs rest days, for the currently filtered date range
-    gym_days_count = int(df["Gym Completed"].fillna(False).sum())
-    rest_days_count = int(df["Workout"].apply(is_rest_day).sum())
-    total_days_count = len(df)
+    # Gym days vs rest days — current calendar month only (independent of the sidebar date filter)
+    month_start = pd.Timestamp(today.year, today.month, 1)
+    month_df = df[(df["Date"] >= month_start) & (df["Date"].dt.month == today.month) & (df["Date"].dt.year == today.year)]
+
+    gym_days_count = int(month_df["Gym Completed"].fillna(False).sum())
+    rest_days_count = int(month_df["Workout"].apply(is_rest_day).sum())
+    total_days_count = len(month_df)
 
     c5, c6 = st.columns(2)
     c5.metric(
         "🏋️ Gym Days",
         f"{gym_days_count} / {total_days_count}",
-        help="Days in the selected range where 'Gym Completed' habit was checked.",
+        help="Days this calendar month where 'Gym Completed' habit was checked.",
     )
     c6.metric(
         "🛌 Rest Days",
         f"{rest_days_count} / {total_days_count}",
-        help="Days in the selected range logged as 'Rest' (or with no workout logged).",
+        help="Days this calendar month logged as 'Rest' (or with no workout logged).",
     )
 
     st.write("")
 
     # ---------- TABS ----------
-    tab_weight, tab_sleep, tab_steps, tab_mood, tab_habits, tab_prs, tab_history = st.tabs(
-        ["⚖️ Weight", "😴 Sleep", "👟 Steps", "🙂 Mood", "✅ Habits & Extras", "🏆 PRs", "🏋️ History"]
+    tab_weight, tab_sleep, tab_steps, tab_mood, tab_habits, tab_history = st.tabs(
+        ["⚖️ Weight", "😴 Sleep", "👟 Steps", "🙂 Mood", "✅ Habits & Extras", "🏋️ History"]
     )
 
     with tab_weight:
@@ -1328,40 +1363,6 @@ with tab_dashboard:
             st.session_state["dashboard_success_message"] = f"Updated habits for {updated_count} day(s)."
             st.session_state["show_dashboard_balloons"] = True
             st.rerun()
-
-    with tab_prs:
-        pr_rows = []
-        for _, r in df.iterrows():
-            for exercise, weight, reps in parse_workout_sets(r.get("Workout Notes")):
-                pr_rows.append({"Date": r["Date"], "Exercise": exercise, "Weight": weight, "Reps": reps})
-
-        if not pr_rows:
-            st.info(
-                "No parsable sets found yet. Log workouts with a format like:\n\n"
-                "Bench Press\n60 x 8\n70 x 6\n\n"
-                "(exercise name on its own line, then '<weight> x <reps>' lines below it)"
-            )
-        else:
-            pr_df = pd.DataFrame(pr_rows)
-            exercises = sorted(pr_df["Exercise"].unique())
-            selected_exercise = st.selectbox("Exercise", exercises)
-
-            ex_df = pr_df[pr_df["Exercise"] == selected_exercise]
-            daily_top = ex_df.groupby("Date", as_index=False)["Weight"].max().sort_values("Date")
-
-            best_ever = daily_top["Weight"].max()
-            st.metric(f"All-time best — {selected_exercise}", f"{best_ever:.1f} kg")
-
-            fig = px.line(daily_top, x="Date", y="Weight", markers=True, color_discrete_sequence=[ACCENT])
-            fig.update_layout(yaxis_title="Top Set Weight (kg)")
-            st.plotly_chart(style_fig(fig), width='stretch')
-
-            st.markdown("**All logged sets**")
-            st.dataframe(
-                ex_df.sort_values("Date", ascending=False)[["Date", "Weight", "Reps"]],
-                width='stretch',
-                hide_index=True,
-            )
 
     with tab_history:
         for _, r in df.sort_values("Date", ascending=False).iterrows():
