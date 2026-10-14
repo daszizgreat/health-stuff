@@ -616,8 +616,8 @@ def generate_weekly_excel(frame):
 
     week_df = frame[(frame["Date"] >= week_start) & (frame["Date"] <= week_end)].copy()
 
-    gym_days = int(week_df["Gym Completed"].fillna(False).sum()) if not week_df.empty else 0
-    rest_days = int(week_df["Workout"].apply(is_rest_day).sum()) if not week_df.empty else 0
+    gym_days = int(week_df["Gym Completed"].fillna(False).astype(bool).sum()) if not week_df.empty else 0
+    rest_days = int(week_df["Workout"].map(is_rest_day).astype(bool).sum()) if not week_df.empty else 0
 
     summary_df = pd.DataFrame({
         "Metric": [
@@ -1232,8 +1232,8 @@ with tab_dashboard:
     month_start = pd.Timestamp(today.year, today.month, 1)
     month_df = df[(df["Date"] >= month_start) & (df["Date"].dt.month == today.month) & (df["Date"].dt.year == today.year)]
 
-    gym_days_count = int(month_df["Gym Completed"].fillna(False).sum())
-    rest_days_count = int(month_df["Workout"].apply(is_rest_day).sum())
+    gym_days_count = int(month_df["Gym Completed"].fillna(False).astype(bool).sum())
+    rest_days_count = int(month_df["Workout"].map(is_rest_day).astype(bool).sum())
     total_days_count = len(month_df)
 
     c5, c6 = st.columns(2)
